@@ -443,14 +443,13 @@ def send_question_emojis(user_id: int):
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    # Каждый вариант ответа на новой строке
-    for opt in q['options']:
-        keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-    # Кнопки управления
-    keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY)
-    keyboard.add_line()
-    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
+    # Добавляем варианты ответов, каждый на новой строке, чтобы текст полностью помещался
+    for i, opt in enumerate(q['options']):
+        keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY, payload={'answer': i})
+        keyboard.add_line()  # перенос после каждого варианта
+    # Кнопки управления в одной строке
+    keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY, payload={'skip': True})
+    keyboard.add_button('🏁 Завершить', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
     msg = f"🎨 **Вопрос {q_index+1}/{state['total']}**\n\n{q['emoji_scene']}\n\nВыберите правильный вариант:"
     send_message(user_id, msg, keyboard)
 
@@ -548,22 +547,17 @@ def send_scenario_question(user_id: int):
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
-    # Отменяем старый таймер, если есть
-    if state.get('timer'):
-        try:
-            state['timer'].cancel()
-        except:
-            pass
-        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
+    # Две основные кнопки в одной строке
     keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 1})
     keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 0})
     keyboard.add_line()
+    # Кнопка завершения
     keyboard.add_button('🏁 Завершить', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
     msg = f"📖 **Ситуация {q_index+1}/{state['total']}**\n\n{q['situation']}\n\n⏳ У вас есть **10 секунд** на ответ."
     send_message(user_id, msg, keyboard)
@@ -1063,7 +1057,6 @@ def handle_message_event(event):
     logger.info(f"MESSAGE_EVENT: user_id={user_id}, payload={payload}")
     state = get_state(user_id)
     if not state:
-        logger.warning(f"Нет состояния для {user_id}")
         return
     scenario = state.get('scenario')
     if scenario == 'game_emojis':
@@ -1074,19 +1067,17 @@ def handle_message_event(event):
         elif 'finish' in payload:
             finish_game_emojis(user_id)
     elif scenario == 'game_scenarios':
-        # Отменяем таймер при любом клике
+        # Отменяем таймер, если он есть
         if state.get('timer'):
-            try:
-                state['timer'].cancel()
-            except:
-                pass
+            state['timer'].cancel()
             state['timer'] = None
+            save_state(user_id, state)
         if 'choice' in payload:
             if state.get('timeout_processed'):
                 return
             handle_scenario_answer(user_id, payload['choice'])
         elif 'finish' in payload:
-            finish_game_scenarios(user_id)
+            finish_game_scenarios(user_id))
 
 # ==================== ГЛАВНЫЙ ЦИКЛ ====================
 logger.info("Бот запущен")
