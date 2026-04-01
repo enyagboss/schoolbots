@@ -443,10 +443,13 @@ def send_question_emojis(user_id: int):
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
+    # Каждый вариант ответа на новой строке
     for opt in q['options']:
         keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY)
-    keyboard.add_line()
+        keyboard.add_line()
+    # Кнопки управления
     keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY)
+    keyboard.add_line()
     keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
     msg = f"🎨 **Вопрос {q_index+1}/{state['total']}**\n\n{q['emoji_scene']}\n\nВыберите правильный вариант:"
     send_message(user_id, msg, keyboard)
@@ -514,7 +517,7 @@ def scenario_timeout(user_id: int):
     if q_index >= state['total']:
         return
     q = state['questions'][q_index]
-    correct_answer = "правонарушение" if q['is_offense'] else "не правонарушение"
+    correct_answer = "нарушение" if q['is_offense'] else "не нарушение"
     explanation = q['explanation']
     send_message(user_id, f"⏰ Время вышло!\nПравильный ответ: {correct_answer}\n\n{explanation}")
     state['current_question'] += 1
@@ -552,19 +555,19 @@ def send_scenario_question(user_id: int):
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    keyboard.add_button('⚠️ Правонарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 1})
-    keyboard.add_button('✅ Не правонарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 0})
+    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
-    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
+    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
     msg = f"📖 **Ситуация {q_index+1}/{state['total']}**\n\n{q['situation']}\n\n⏳ У вас есть **10 секунд** на ответ."
     send_message(user_id, msg, keyboard)
     state['timeout_processed'] = False
-    save_state(user_id, state)
-    # Запускаем таймер, сохраняем в активные
     timer = threading.Timer(10.0, scenario_timeout, args=[user_id])
     timer.daemon = True
     timer.start()
-    active_timers[user_id] = timer
+    state['timer'] = timer
+    save_state(user_id, state)
 
 def handle_scenario_answer(user_id: int, choice: int):
     state = get_state(user_id)
@@ -587,7 +590,7 @@ def handle_scenario_answer(user_id: int, choice: int):
         state['score'] += 1
         result_msg = f"✅ Правильно! {q['explanation']}"
     else:
-        correct_text = "правонарушение" if correct else "не правонарушение"
+        correct_text = "нарушение" if correct else "не нарушение"
         result_msg = f"❌ Неправильно. Правильный ответ: {correct_text}\n\n{q['explanation']}"
     send_message(user_id, result_msg)
     state['current_question'] += 1
@@ -1003,7 +1006,6 @@ def reminder_scheduler():
         # Получаем текущее время в локальном часовом поясе
         now_local = datetime.now(TIMEZONE)
         now_str = now_local.strftime('%H:%M')
-        logger.info(f"Планировщик проверяет время: {now_str} (локальное)")
 
         with db_lock:
             # Одноразовые напоминания
