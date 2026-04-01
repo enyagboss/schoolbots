@@ -1112,6 +1112,5 @@ for event in longpoll.listen():
                     cursor.execute('INSERT INTO users (user_id, name) VALUES (?, ?)', (user_id, name))
                     conn.commit()
             handle_user_message(user_id, text, name)
-
-elif event.type == VkBotEventType.MESSAGE_EVENT:
-    handle_message_event(event)
+    elif event.type == VkBotEventType.MESSAGE_EVENT:
+        handle_message_event(event))
