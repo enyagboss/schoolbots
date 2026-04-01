@@ -642,7 +642,7 @@ def handle_user_message(user_id: int, text: str, name: str):
 
     state = get_state(user_id)
 
-    # ==================== ОБРАБОТКА АКТИВНЫХ СЦЕНАРИЕВ ====================
+    # ==================== АКТИВНЫЕ СЦЕНАРИИ ====================
     if state and state.get('scenario') in ['stress_test', 'anxiety_test', 'compose_message', 'appeal', 'reminder', 'change_daily_time']:
         scenario = state['scenario']
         if scenario == 'stress_test':
@@ -665,6 +665,7 @@ def handle_user_message(user_id: int, text: str, name: str):
                     send_message(user_id, msg)
                     clear_state(user_id)
             return
+
         elif scenario == 'anxiety_test':
             step = state['step']
             if step < 5:
@@ -685,6 +686,7 @@ def handle_user_message(user_id: int, text: str, name: str):
                     send_message(user_id, msg)
                     clear_state(user_id)
             return
+
         elif scenario == 'compose_message':
             if state.get('step') == 'get_text':
                 save_state(user_id, {'scenario': 'compose_message', 'step': 'compose', 'original': text})
@@ -695,6 +697,7 @@ def handle_user_message(user_id: int, text: str, name: str):
                 send_message(user_id, f"Отлично! Твоё сообщение готово:\n\n{text}\n\nТеперь ты можешь отправить его адресату.")
                 clear_state(user_id)
             return
+
         elif scenario == 'appeal':
             contact = None
             if text_lower.strip() == 'анонимно':
@@ -715,6 +718,7 @@ def handle_user_message(user_id: int, text: str, name: str):
             send_message(user_id, "Спасибо, твоё обращение отправлено. Психолог ответит в ближайшее время.")
             clear_state(user_id)
             return
+
         elif scenario == 'reminder':
             if state.get('step') == 'get_text':
                 save_state(user_id, {'scenario': 'reminder', 'step': 'get_time', 'text': text})
@@ -737,40 +741,50 @@ def handle_user_message(user_id: int, text: str, name: str):
                     send_message(user_id, "Неверный формат времени. Используй ЧЧ:ММ.")
                 clear_state(user_id)
             return
+
         elif scenario == 'change_daily_time':
             update_daily_time(user_id, text)
             return
 
-    # ==================== ОБРАБОТКА КОМАНД И КНОПОК ====================
+    # ==================== КОМАНДЫ И КНОПКИ ====================
     if text_lower in ['начать', 'старт', 'привет', 'меню', 'главное меню', '/start', '🏠 главное меню']:
         send_message(user_id, "👋 Привет! Я твой помощник. Выбери, что тебя интересует:", get_keyboard('user'))
+        return
 
-    elif text_lower in ['помощь по темам', '📚 помощь по темам']:
+    if text_lower in ['помощь по темам', '📚 помощь по темам']:
         handle_help_themes(user_id)
+        return
 
-    elif text_lower in ['тесты', '📊 тесты']:
+    if text_lower in ['тесты', '📊 тесты']:
         handle_tests_menu(user_id)
+        return
 
-    elif text_lower in ['мотивация', '💡 мотивация']:
+    if text_lower in ['мотивация', '💡 мотивация']:
         handle_motivation(user_id)
+        return
 
-    elif text_lower in ['совет', '🆘 совет']:
+    if text_lower in ['совет', '🆘 совет']:
         handle_advice(user_id)
+        return
 
-    elif text_lower in ['игры', '🎮 игры']:
+    if text_lower in ['игры', '🎮 игры']:
         games_menu(user_id)
+        return
 
-    elif text_lower in ['обратиться к психологу', '📝 обратиться к психологу']:
+    if text_lower in ['обратиться к психологу', '📝 обратиться к психологу']:
         handle_appeal_start(user_id)
+        return
 
-    elif text_lower in ['напомнить о событии', '⏰ напомнить о событии']:
+    if text_lower in ['напомнить о событии', '⏰ напомнить о событии']:
         handle_reminder_start(user_id)
+        return
 
-    elif text_lower in ['ежедневные советы', '☀️ ежедневные советы']:
+    if text_lower in ['ежедневные советы', '☀️ ежедневные советы']:
         handle_daily_motivation_menu(user_id)
+        return
 
-    # Кнопки внутри меню "Помощь по темам"
-    elif text_lower == 'стресс':
+    # ==================== ОСТАЛЬНЫЕ КОМАНДЫ ====================
+    if text_lower == 'стресс':
         handle_stress_menu(user_id)
     elif text_lower == 'конфликты':
         handle_conflict_menu(user_id)
@@ -790,70 +804,56 @@ def handle_user_message(user_id: int, text: str, name: str):
     elif text_lower == 'буллинг':
         handle_bullying_advice(user_id)
     elif text_lower == 'тревога':
-        text = ("Чувствовать тревогу — это нормально. Вот несколько способов справиться:\n"
-                "• Сделай дыхательное упражнение.\n"
-                "• Отвлекись на приятное занятие.\n"
-                "• Поговори с доверенным человеком.\n"
-                "• Запиши свои мысли.\n\n"
-                "Если тревога сильная, обратись к психологу.")
-        send_message(user_id, text)
+        text_msg = ("Чувствовать тревогу — это нормально. Вот несколько способов справиться:\n"
+                    "• Сделай дыхательное упражнение.\n"
+                    "• Отвлекись на приятное занятие.\n"
+                    "• Поговори с доверенным человеком.\n"
+                    "• Запиши свои мысли.\n\n"
+                    "Если тревога сильная, обратись к психологу.")
+        send_message(user_id, text_msg)
     elif text_lower == 'сон':
-        text = ("Рекомендации для здорового сна:\n"
-                "• За 60 минут до сна выключи гаджеты.\n"
-                "• За 30 минут займись расслабляющим занятием.\n"
-                "• За 10 минут сделай легкую растяжку.\n"
-                "• Ложись спать в одно и то же время.")
-        send_message(user_id, text)
+        text_msg = ("Рекомендации для здорового сна:\n"
+                    "• За 60 минут до сна выключи гаджеты.\n"
+                    "• За 30 минут займись расслабляющим занятием.\n"
+                    "• За 10 минут сделай легкую растяжку.\n"
+                    "• Ложись спать в одно и то же время.")
+        send_message(user_id, text_msg)
     elif text_lower == 'организация пространства':
-        text = ("Как организовать учебное место:\n"
-                "• Убери лишнее со стола.\n"
-                "• Обеспечь хорошее освещение.\n"
-                "• Держи материалы под рукой.\n"
-                "• Удобный стул и правильная высота стола.\n"
-                "• Минимизируй отвлекающие факторы.")
-        send_message(user_id, text)
-
-    # Кнопки внутри меню "Тесты"
+        text_msg = ("Как организовать учебное место:\n"
+                    "• Убери лишнее со стола.\n"
+                    "• Обеспечь хорошее освещение.\n"
+                    "• Держи материалы под рукой.\n"
+                    "• Удобный стул и правильная высота стола.\n"
+                    "• Минимизируй отвлекающие факторы.")
+        send_message(user_id, text_msg)
     elif text_lower == 'тест на стресс':
         start_stress_test(user_id)
     elif text_lower == 'тест на тревожность':
         start_anxiety_test(user_id)
-
-    # Кнопки внутри меню "Стресс"
     elif text_lower == 'пройти тест на стресс':
         start_stress_test(user_id)
     elif text_lower == 'советы при стрессе':
         handle_stress_tips(user_id)
     elif text_lower == 'дыхательное упражнение':
         handle_breathing_exercise(user_id)
-
-    # Кнопки внутри меню "Конфликты"
     elif text_lower == 'как разрешить конфликт?':
         handle_conflict_resolution(user_id)
     elif text_lower == 'помощь в диалоге':
         handle_dialog_help(user_id)
     elif text_lower == 'что делать при буллинге?':
         handle_bullying_advice(user_id)
-
-    # Кнопки в меню "Игры"
     elif text_lower in ['закон в картинках', '🎴 закон в картинках']:
         start_game_emojis(user_id)
     elif text_lower in ['правонарушение или нет?', '⚖️ правонарушение или нет?']:
         start_game_scenarios(user_id)
     elif text_lower in ['статистика', 'stats', '/stats', '📊 статистика']:
         show_stats(user_id)
-    elif text_lower in ['главное меню', '🏠 главное меню']:
-        send_message(user_id, "Главное меню:", get_keyboard('user'))
-
-    # Кнопки в меню "Ежедневные советы"
     elif text_lower == 'включить':
         set_daily_motivation(user_id, True)
     elif text_lower == 'выключить':
         set_daily_motivation(user_id, False)
     elif text_lower == 'изменить время':
         change_daily_motivation_time(user_id)
-
-    # Команды
     elif text_lower == '/restart':
         if state and state.get('scenario') in ('game_emojis', 'game_scenarios'):
             if state['scenario'] == 'game_emojis':
@@ -874,70 +874,69 @@ def handle_user_message(user_id: int, text: str, name: str):
                      "🔹 'Ежедневные советы' – настройте утренние сообщения.\n"
                      "Команды: /stats, /restart, /help")
         send_message(user_id, help_text)
-
-    # Назад
     elif text_lower == '🔙 назад':
         send_message(user_id, "Главное меню:", get_keyboard('user'))
-
-    # ==================== ОБРАБОТКА АКТИВНЫХ ИГР (текстовый ввод) ====================
     else:
+        # ==================== АКТИВНЫЕ ИГРЫ ====================
         if state and state.get('scenario') == 'game_emojis':
-            # Проверка на пропуск и завершение
-            if text_lower in ['пропустить', '⏩ пропустить', 'пропустить вопрос']:
+            # Пропускаем текст, который является кнопкой (уже обработан через MESSAGE_EVENT)
+            if any(mark in text for mark in ['⏩', '🏁', 'Пропустить', 'Завершить']):
+                return
+            if text_lower == 'пропустить':
                 skip_emojis_question(user_id)
-            elif text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
+            elif text_lower in ['завершить игру', 'закончить']:
                 finish_game_emojis(user_id)
             else:
                 q_index = state.get('current_question', 0)
                 if q_index < state.get('total', 0):
                     q = state['questions'][q_index]
                     matched = False
-                    # Сравниваем текст варианта
                     for i, opt in enumerate(q['options']):
                         if text_lower == opt.lower():
                             handle_emojis_answer(user_id, i)
                             matched = True
                             break
-                    # Если не совпал, пробуем по номеру варианта
                     if not matched and text_lower in ['1', '2', '3']:
                         idx = int(text_lower) - 1
                         if 0 <= idx < len(q['options']):
                             handle_emojis_answer(user_id, idx)
                             matched = True
                     if not matched:
-                        send_message(user_id, "Используйте кнопки для ответа или введите текст варианта (например, 'Правила дорожного движения').")
-    elif state and state.get('scenario') == 'game_scenarios':
-        # Пропускаем текст, который является кнопкой (уже обработан через MESSAGE_EVENT)
-        if any(mark in text for mark in ['⚠️', '✅', '🏁']):
-            return
-        if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
-            finish_game_scenarios(user_id)
-        else:
-            if state.get('timeout_processed'):
-                send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
+                        send_message(user_id, "Используйте кнопки для ответа или введите текст варианта (например, 'Нарушение ПДД').")
+        elif state and state.get('scenario') == 'game_scenarios':
+            # Пропускаем текст, который является кнопкой (уже обработан через MESSAGE_EVENT)
+            if any(mark in text for mark in ['⚠️', '✅', '🏁']):
                 return
-            q_index = state['current_question']
-            if q_index >= state['total']:
+            if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
                 finish_game_scenarios(user_id)
-                return
-            normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
-            choice = None
-            not_offense_phrases = ['не нарушение', 'не наруш', 'не правонарушение', 'не правонаруш', 'законно', 'не является', 'это не нарушение', 'нет']
-            if normalized in not_offense_phrases:
-                choice = 0
             else:
-                offense_phrases = ['нарушение', 'наруш', 'правонарушение', 'правонаруш', 'преступление', 'да', 'это нарушение']
-                if normalized in offense_phrases:
-                    choice = 1
+                if state.get('timeout_processed'):
+                    send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
+                    return
+                q_index = state['current_question']
+                if q_index >= state['total']:
+                    finish_game_scenarios(user_id)
+                    return
+                normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
+                choice = None
+                not_offense_phrases = ['не нарушение', 'не наруш', 'не правонарушение', 'не правонаруш', 'законно', 'не является', 'это не нарушение', 'нет']
+                if normalized in not_offense_phrases:
+                    choice = 0
                 else:
-                    if 'не' in normalized and ('наруш' in normalized or 'правонаруш' in normalized):
-                        choice = 0
-                    elif 'наруш' in normalized or 'правонаруш' in normalized or 'преступл' in normalized:
+                    offense_phrases = ['нарушение', 'наруш', 'правонарушение', 'правонаруш', 'преступление', 'да', 'это нарушение']
+                    if normalized in offense_phrases:
                         choice = 1
                     else:
-                        send_message(user_id, "Введите 'Нарушение' или 'Не нарушение'.")
-                        return
-            handle_scenario_answer(user_id, choice)
+                        if 'не' in normalized and ('наруш' in normalized or 'правонаруш' in normalized):
+                            choice = 0
+                        elif 'наруш' in normalized or 'правонаруш' in normalized or 'преступл' in normalized:
+                            choice = 1
+                        else:
+                            send_message(user_id, "Введите 'Нарушение' или 'Не нарушение'.")
+                            return
+                handle_scenario_answer(user_id, choice)
+        else:
+            send_message(user_id, "Я не понял команду. Используй кнопки меню.", get_keyboard('user'))
 
 # ==================== ОБРАБОТЧИК ДЛЯ ПСИХОЛОГА ====================
 def handle_psychologist_message(user_id: int, text: str):
