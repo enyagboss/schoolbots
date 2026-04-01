@@ -224,7 +224,7 @@ def answer_appeal(appeal_id: int, answer_text: str, psychologist_id: int):
         cursor.execute('''
             UPDATE appeals SET answered = 1, answer_text = ?, answer_timestamp = ?
             WHERE id = ?
-        ''', (answer_text, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        ''', (answer_text, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         conn.commit()
     send_message(user_id, f"🎓 Ответ психолога:\n{answer_text}")
     return True
