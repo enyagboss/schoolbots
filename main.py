@@ -906,37 +906,38 @@ def handle_user_message(user_id: int, text: str, name: str):
                             matched = True
                     if not matched:
                         send_message(user_id, "Используйте кнопки для ответа или введите текст варианта (например, 'Правила дорожного движения').")
-        elif state and state.get('scenario') == 'game_scenarios':
-            if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
+    elif state and state.get('scenario') == 'game_scenarios':
+        # Пропускаем текст, который является кнопкой (уже обработан через MESSAGE_EVENT)
+        if any(mark in text for mark in ['⚠️', '✅', '🏁']):
+            return
+        if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
+            finish_game_scenarios(user_id)
+        else:
+            if state.get('timeout_processed'):
+                send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
+                return
+            q_index = state['current_question']
+            if q_index >= state['total']:
                 finish_game_scenarios(user_id)
+                return
+            normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
+            choice = None
+            not_offense_phrases = ['не нарушение', 'не наруш', 'не правонарушение', 'не правонаруш', 'законно', 'не является', 'это не нарушение', 'нет']
+            if normalized in not_offense_phrases:
+                choice = 0
             else:
-                if state.get('timeout_processed'):
-                    send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
-                    return
-                q_index = state['current_question']
-                if q_index >= state['total']:
-                    finish_game_scenarios(user_id)
-                    return
-                normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
-                choice = None
-                not_offense_phrases = ['не правонарушение', 'не правонаруш', 'не нарушение', 'не наруш', 'законно', 'не является', 'это не правонарушение', 'нет']
-                if normalized in not_offense_phrases:
-                    choice = 0
+                offense_phrases = ['нарушение', 'наруш', 'правонарушение', 'правонаруш', 'преступление', 'да', 'это нарушение']
+                if normalized in offense_phrases:
+                    choice = 1
                 else:
-                    offense_phrases = ['правонарушение', 'правонаруш', 'нарушение', 'наруш', 'преступление', 'да', 'это правонарушение']
-                    if normalized in offense_phrases:
+                    if 'не' in normalized and ('наруш' in normalized or 'правонаруш' in normalized):
+                        choice = 0
+                    elif 'наруш' in normalized or 'правонаруш' in normalized or 'преступл' in normalized:
                         choice = 1
                     else:
-                        if 'не' in normalized and ('правонаруш' in normalized or 'наруш' in normalized):
-                            choice = 0
-                        elif 'правонаруш' in normalized or 'наруш' in normalized or 'преступл' in normalized:
-                            choice = 1
-                        else:
-                            send_message(user_id, "Введите 'Правонарушение' или 'Не правонарушение'.")
-                            return
-                handle_scenario_answer(user_id, choice)
-        else:
-            send_message(user_id, "Я не понял команду. Используй кнопки меню.", get_keyboard('user'))
+                        send_message(user_id, "Введите 'Нарушение' или 'Не нарушение'.")
+                        return
+            handle_scenario_answer(user_id, choice)
 
 # ==================== ОБРАБОТЧИК ДЛЯ ПСИХОЛОГА ====================
 def handle_psychologist_message(user_id: int, text: str):
