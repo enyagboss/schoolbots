@@ -443,11 +443,14 @@ def send_question_emojis(user_id: int):
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    for i, opt in enumerate(q['options']):
-        keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY, payload={'answer': i})
+    # Каждый вариант ответа на новой строке
+    for opt in q['options']:
+        keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+    # Кнопки управления
+    keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY)
     keyboard.add_line()
-    keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY, payload={'skip': True})
-    keyboard.add_button('🏁 Завершить', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
+    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
     msg = f"🎨 **Вопрос {q_index+1}/{state['total']}**\n\n{q['emoji_scene']}\n\nВыберите правильный вариант:"
     send_message(user_id, msg, keyboard)
 
@@ -500,20 +503,18 @@ def skip_emojis_question(user_id: int):
     save_state(user_id, state)
     send_question_emojis(user_id)
 
+# Игра с таймером
 def scenario_timeout(user_id: int):
+    # Таймер сработал
+    logger.info(f"Таймер сработал для {user_id}")
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
     if state.get('timeout_processed'):
         return
-    # Отмечаем, что таймаут обработан
     state['timeout_processed'] = True
-    # Очищаем таймер в состоянии, чтобы он не вызывался повторно
-    if state.get('timer'):
-        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
-        finish_game_scenarios(user_id)
         return
     q = state['questions'][q_index]
     correct_answer = "нарушение" if q['is_offense'] else "не нарушение"
@@ -521,53 +522,44 @@ def scenario_timeout(user_id: int):
     send_message(user_id, f"⏰ Время вышло!\nПравильный ответ: {correct_answer}\n\n{explanation}")
     state['current_question'] += 1
     save_state(user_id, state)
+    # Удаляем таймер из активных
+    if user_id in active_timers:
+        del active_timers[user_id]
     if state['current_question'] < state['total']:
         send_scenario_question(user_id)
     else:
         finish_game_scenarios(user_id)
 
-def finish_game_scenarios(user_id: int):
-    state = get_state(user_id)
-    if not state:
+def start_game_scenarios(user_id: int):
+    if not QUESTIONS_SCENARIOS:
+        send_message(user_id, "❌ Вопросы для игры не загружены. Обратитесь к администратору.")
         return
-    # Отменяем таймер, если он активен
-    if state.get('timer'):
-        state['timer'].cancel()
-        state['timer'] = None
-    total = state['total']
-    score = state['score']
-    update_game_stats(user_id, 'scenarios', correct=score, games_increment=1)
-    msg = f"🏆 **Игра окончена!**\nПравильных ответов: {score}/{total}\n"
-    if score == total:
-        msg += "🎉 Отлично! Вы отлично разбираетесь в правонарушениях!"
-    elif score > total//2:
-        msg += "👍 Хороший результат, изучите сложные моменты."
-    else:
-        msg += "📚 Рекомендуем изучить административное и уголовное право."
-    keyboard = VkKeyboard(one_time=False)
-    keyboard.add_button('🎮 Игры', color=VkKeyboardColor.PRIMARY)
-    keyboard.add_button('🏠 Главное меню', color=VkKeyboardColor.SECONDARY)
-    send_message(user_id, msg, keyboard)
-    clear_state(user_id)
+    save_state(user_id, {
+        'scenario': 'game_scenarios',
+        'questions': QUESTIONS_SCENARIOS,
+        'current_question': 0,
+        'score': 0,
+        'total': len(QUESTIONS_SCENARIOS),
+        'timeout_processed': False
+        # timer не сохраняем
+    })
+    send_scenario_question(user_id)
 
 def send_scenario_question(user_id: int):
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
-    # Отменяем предыдущий таймер, если он существует
-    if state.get('timer'):
-        state['timer'].cancel()
-        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 1})
-    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 0})
+    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
-    keyboard.add_button('🏁 Завершить', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
+    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
     msg = f"📖 **Ситуация {q_index+1}/{state['total']}**\n\n{q['situation']}\n\n⏳ У вас есть **10 секунд** на ответ."
     send_message(user_id, msg, keyboard)
     state['timeout_processed'] = False
@@ -582,12 +574,12 @@ def handle_scenario_answer(user_id: int, choice: int):
     if not state or state.get('scenario') != 'game_scenarios':
         return
     if state.get('timeout_processed'):
-        # Уже был таймаут, игнорируем ответ
+        # Уже таймер сработал, игнорируем
         return
     # Отменяем таймер
-    if state.get('timer'):
-        state['timer'].cancel()
-        state['timer'] = None
+    if user_id in active_timers:
+        active_timers[user_id].cancel()
+        del active_timers[user_id]
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
@@ -602,6 +594,7 @@ def handle_scenario_answer(user_id: int, choice: int):
         result_msg = f"❌ Неправильно. Правильный ответ: {correct_text}\n\n{q['explanation']}"
     send_message(user_id, result_msg)
     state['current_question'] += 1
+    state['timeout_processed'] = False
     save_state(user_id, state)
     if state['current_question'] < state['total']:
         send_scenario_question(user_id)
@@ -1061,6 +1054,7 @@ def handle_message_event(event):
     logger.info(f"MESSAGE_EVENT: user_id={user_id}, payload={payload}")
     state = get_state(user_id)
     if not state:
+        logger.warning(f"Нет состояния для {user_id}")
         return
     scenario = state.get('scenario')
     if scenario == 'game_emojis':
@@ -1071,11 +1065,11 @@ def handle_message_event(event):
         elif 'finish' in payload:
             finish_game_emojis(user_id)
     elif scenario == 'game_scenarios':
-        # Отменяем таймер при любом действии
-        if state.get('timer'):
-            state['timer'].cancel()
-            state['timer'] = None
         if 'choice' in payload:
+            # Отменяем таймер, если он ещё активен
+            if user_id in active_timers:
+                active_timers[user_id].cancel()
+                del active_timers[user_id]
             if state.get('timeout_processed'):
                 return
             handle_scenario_answer(user_id, payload['choice'])
