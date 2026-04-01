@@ -11,7 +11,6 @@ import re
 import json
 from typing import Optional, List, Dict, Any
 import zoneinfo
-from datetime import datetime
 
 # Часовой пояс бота (например, Москва)
 TIMEZONE = zoneinfo.ZoneInfo("Europe/Moscow")
@@ -225,7 +224,7 @@ def answer_appeal(appeal_id: int, answer_text: str, psychologist_id: int):
         cursor.execute('''
             UPDATE appeals SET answered = 1, answer_text = ?, answer_timestamp = ?
             WHERE id = ?
-        ''', (answer_text, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), appeal_id))
+        ''', (answer_text, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         conn.commit()
     send_message(user_id, f"🎓 Ответ психолога:\n{answer_text}")
     return True
@@ -1014,7 +1013,7 @@ def reminder_scheduler():
     """Фоновый поток для отправки напоминаний и мотивационных сообщений"""
     while True:
         # Получаем текущее время в локальном часовом поясе
-        now_local = datetime.now(TIMEZONE)
+        now_local = datetime.datetime.now(TIMEZONE)
         now_str = now_local.strftime('%H:%M')
 
         with db_lock:
