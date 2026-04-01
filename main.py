@@ -998,28 +998,38 @@ def handle_psychologist_message(user_id: int, text: str):
 
 # ==================== ПЛАНИРОВЩИК ====================
 def reminder_scheduler():
+    """Фоновый поток для отправки напоминаний и мотивационных сообщений"""
     while True:
-        now = datetime.datetime.now().strftime('%H:%M')
+        # Получаем текущее время в локальном часовом поясе
+        now_local = datetime.now(TIMEZONE)
+        now_str = now_local.strftime('%H:%M')
+        logger.info(f"Планировщик проверяет время: {now_str} (локальное)")
+
         with db_lock:
+            # Одноразовые напоминания
             cursor.execute('''
                 SELECT id, user_id, text FROM reminders
                 WHERE active = 1 AND repeat_type = 'once' AND time = ?
-            ''', (now,))
+            ''', (now_str,))
             once_reminders = cursor.fetchall()
             for rem_id, user_id, text in once_reminders:
                 send_message(user_id, f"⏰ Напоминание: {text}")
                 cursor.execute('UPDATE reminders SET active = 0 WHERE id = ?', (rem_id,))
+
+            # Ежедневные
             cursor.execute('''
                 SELECT user_id, text FROM reminders
                 WHERE active = 1 AND repeat_type = 'daily' AND time = ?
-            ''', (now,))
+            ''', (now_str,))
             daily_reminders = cursor.fetchall()
             for user_id, text in daily_reminders:
                 send_message(user_id, f"⏰ Напоминание: {text}")
+
+            # Ежедневные мотивационные сообщения
             cursor.execute('''
                 SELECT user_id FROM daily_motivation
                 WHERE enabled = 1 AND time = ?
-            ''', (now,))
+            ''', (now_str,))
             users = cursor.fetchall()
             for (user_id,) in users:
                 quotes = [
