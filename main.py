@@ -10,6 +10,11 @@ import logging
 import re
 import json
 from typing import Optional, List, Dict, Any
+import zoneinfo
+from datetime import datetime
+
+# Часовой пояс бота (например, Москва)
+TIMEZONE = zoneinfo.ZoneInfo("Europe/Moscow")
 
 # ==================== КОНФИГУРАЦИЯ ====================
 GROUP_TOKEN = "vk1.a.DIHs3tDsCYSMzetUdq6Yxkr9q8LLFgxOkERo-n3ffmiG41yCgQfV1mnbqjt94iKHShAKCfUcEwLGMUMw3zTWzd9-oWdQDyZaV9GruPKBuY2mV7q-mwxvkBQwQSEJH_HzCE6Tt67cbWCBSO065fj44d94Ki_gDQizWnAeh4hmC-5vyzf8a08O28ueyPDC57NlihPcxlbAIseqZjwoMSa9bQ"
