@@ -433,26 +433,20 @@ def start_game_emojis(user_id: int):
     })
     send_question_emojis(user_id)
 
-def send_question_emojis(user_id: int):
-    state = get_state(user_id)
-    if not state or state.get('scenario') != 'game_emojis':
+def start_game_scenarios(user_id: int):
+    if not QUESTIONS_SCENARIOS:
+        send_message(user_id, "❌ Вопросы для игры не загружены. Обратитесь к администратору.")
         return
-    q_index = state['current_question']
-    if q_index >= state['total']:
-        finish_game_emojis(user_id)
-        return
-    q = state['questions'][q_index]
-    keyboard = VkKeyboard(one_time=False, inline=True)
-    # Каждый вариант ответа на новой строке
-    for opt in q['options']:
-        keyboard.add_button(opt, color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-    # Кнопки управления
-    keyboard.add_button('⏩ Пропустить', color=VkKeyboardColor.SECONDARY)
-    keyboard.add_line()
-    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
-    msg = f"🎨 **Вопрос {q_index+1}/{state['total']}**\n\n{q['emoji_scene']}\n\nВыберите правильный вариант:"
-    send_message(user_id, msg, keyboard)
+    save_state(user_id, {
+        'scenario': 'game_scenarios',
+        'questions': QUESTIONS_SCENARIOS,
+        'current_question': 0,
+        'score': 0,
+        'total': len(QUESTIONS_SCENARIOS),
+        'timeout_processed': False,
+        'timer': None
+    })
+    send_scenario_question(user_id)
 
 def handle_emojis_answer(user_id: int, answer_index: int):
     state = get_state(user_id)
