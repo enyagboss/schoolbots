@@ -949,9 +949,8 @@ def handle_psychologist_message(user_id: int, text: str):
             return
         msg = "Неотвеченные обращения:\n"
         for i, (aid, uid, appeal_text, contact, ts) in enumerate(appeals, 1):
-            short_text = appeal_text[:50] + "..." if len(appeal_text) > 50 else appeal_text
             contact_info = f" (контакт: {contact})" if contact and contact != 'анонимно' else ""
-            msg += f"{i}. {short_text}{contact_info} (от {ts})\n"
+            msg += f"{i}. {appeal_text}{contact_info} (от {ts})\n"
         msg += "\nДля ответа нажмите на кнопку с номером обращения."
         keyboard = VkKeyboard(one_time=False)
         for i in range(1, len(appeals) + 1):
@@ -981,14 +980,17 @@ def handle_psychologist_message(user_id: int, text: str):
             appeal_id = state['psychologist_appeals'].get(appeal_num)
             if appeal_id:
                 with db_lock:
-                    cursor.execute('SELECT answered FROM appeals WHERE id = ?', (appeal_id,))
+                    cursor.execute('SELECT answered, text, contact FROM appeals WHERE id = ?', (appeal_id,))
                     row = cursor.fetchone()
                     if row and row[0] == 1:
                         send_message(user_id, f"Обращение #{appeal_num} уже было отвечено. Обновите список.")
                         clear_state(user_id)
                         return
+                    appeal_text = row[1]
+                    contact = row[2]
+                    contact_info = f" (контакт: {contact})" if contact and contact != 'анонимно' else ""
+                    send_message(user_id, f"**Обращение #{appeal_num}**{contact_info}:\n{appeal_text}\n\nВведите ваш ответ:")
                 save_state(user_id, {'answering_appeal': appeal_id})
-                send_message(user_id, f"Введите текст ответа на обращение #{appeal_num}:")
             else:
                 send_message(user_id, "Обращение не найдено.")
         else:
