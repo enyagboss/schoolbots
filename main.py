@@ -906,7 +906,7 @@ def handle_user_message(user_id: int, text: str, name: str):
                             matched = True
                     if not matched:
                         send_message(user_id, "Используйте кнопки для ответа или введите текст варианта (например, 'Правила дорожного движения').")
-        elif state and state.get('scenario') == 'game_scenarios':
+    elif state and state.get('scenario') == 'game_scenarios':
         # Пропускаем текст, который является кнопкой (уже обработан через MESSAGE_EVENT)
         if any(mark in text for mark in ['⚠️', '✅', '🏁']):
             return
