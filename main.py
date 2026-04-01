@@ -1077,7 +1077,7 @@ def handle_message_event(event):
                 return
             handle_scenario_answer(user_id, payload['choice'])
         elif 'finish' in payload:
-            finish_game_scenarios(user_id))
+            finish_game_scenarios(user_id)
 
 # ==================== ГЛАВНЫЙ ЦИКЛ ====================
 logger.info("Бот запущен")
