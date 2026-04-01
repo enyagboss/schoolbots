@@ -1113,4 +1113,4 @@ for event in longpoll.listen():
                     conn.commit()
             handle_user_message(user_id, text, name)
     elif event.type == VkBotEventType.MESSAGE_EVENT:
-        handle_message_event(event))
+        handle_message_event(event)
