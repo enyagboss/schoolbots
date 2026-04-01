@@ -505,26 +505,25 @@ def skip_emojis_question(user_id: int):
 
 # Игра с таймером
 def scenario_timeout(user_id: int):
-    # Таймер сработал
-    logger.info(f"Таймер сработал для {user_id}")
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
     if state.get('timeout_processed'):
         return
     state['timeout_processed'] = True
+    # Очищаем таймер в состоянии
+    if state.get('timer'):
+        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
+        finish_game_scenarios(user_id)
         return
     q = state['questions'][q_index]
-    correct_answer = "нарушение" if q['is_offense'] else "не нарушение"
+    correct_answer = "правонарушение" if q['is_offense'] else "не правонарушение"
     explanation = q['explanation']
     send_message(user_id, f"⏰ Время вышло!\nПравильный ответ: {correct_answer}\n\n{explanation}")
     state['current_question'] += 1
     save_state(user_id, state)
-    # Удаляем таймер из активных
-    if user_id in active_timers:
-        del active_timers[user_id]
     if state['current_question'] < state['total']:
         send_scenario_question(user_id)
     else:
@@ -540,8 +539,8 @@ def start_game_scenarios(user_id: int):
         'current_question': 0,
         'score': 0,
         'total': len(QUESTIONS_SCENARIOS),
-        'timeout_processed': False
-        # timer не сохраняем
+        'timeout_processed': False,
+        'timer': None
     })
     send_scenario_question(user_id)
 
@@ -549,17 +548,23 @@ def send_scenario_question(user_id: int):
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
+    # Отменяем старый таймер, если есть
+    if state.get('timer'):
+        try:
+            state['timer'].cancel()
+        except:
+            pass
+        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 1})
+    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 0})
     keyboard.add_line()
-    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY)
-    keyboard.add_line()
-    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button('🏁 Завершить', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
     msg = f"📖 **Ситуация {q_index+1}/{state['total']}**\n\n{q['situation']}\n\n⏳ У вас есть **10 секунд** на ответ."
     send_message(user_id, msg, keyboard)
     state['timeout_processed'] = False
@@ -574,12 +579,14 @@ def handle_scenario_answer(user_id: int, choice: int):
     if not state or state.get('scenario') != 'game_scenarios':
         return
     if state.get('timeout_processed'):
-        # Уже таймер сработал, игнорируем
         return
     # Отменяем таймер
-    if user_id in active_timers:
-        active_timers[user_id].cancel()
-        del active_timers[user_id]
+    if state.get('timer'):
+        try:
+            state['timer'].cancel()
+        except:
+            pass
+        state['timer'] = None
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
@@ -590,11 +597,10 @@ def handle_scenario_answer(user_id: int, choice: int):
         state['score'] += 1
         result_msg = f"✅ Правильно! {q['explanation']}"
     else:
-        correct_text = "нарушение" if correct else "не нарушение"
+        correct_text = "правонарушение" if correct else "не правонарушение"
         result_msg = f"❌ Неправильно. Правильный ответ: {correct_text}\n\n{q['explanation']}"
     send_message(user_id, result_msg)
     state['current_question'] += 1
-    state['timeout_processed'] = False
     save_state(user_id, state)
     if state['current_question'] < state['total']:
         send_scenario_question(user_id)
@@ -605,6 +611,13 @@ def finish_game_scenarios(user_id: int):
     state = get_state(user_id)
     if not state:
         return
+    # Отменяем таймер
+    if state.get('timer'):
+        try:
+            state['timer'].cancel()
+        except:
+            pass
+        state['timer'] = None
     total = state['total']
     score = state['score']
     update_game_stats(user_id, 'scenarios', correct=score, games_increment=1)
@@ -619,12 +632,8 @@ def finish_game_scenarios(user_id: int):
     keyboard.add_button('🎮 Игры', color=VkKeyboardColor.PRIMARY)
     keyboard.add_button('🏠 Главное меню', color=VkKeyboardColor.SECONDARY)
     send_message(user_id, msg, keyboard)
-    # Отменяем таймер, если он ещё активен
-    if user_id in active_timers:
-        active_timers[user_id].cancel()
-        del active_timers[user_id]
     clear_state(user_id)
-
+    
 # ==================== ОБРАБОТЧИК СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ ====================
 def handle_user_message(user_id: int, text: str, name: str):
     """Основной обработчик сообщений от обычного пользователя"""
@@ -1065,11 +1074,14 @@ def handle_message_event(event):
         elif 'finish' in payload:
             finish_game_emojis(user_id)
     elif scenario == 'game_scenarios':
+        # Отменяем таймер при любом клике
+        if state.get('timer'):
+            try:
+                state['timer'].cancel()
+            except:
+                pass
+            state['timer'] = None
         if 'choice' in payload:
-            # Отменяем таймер, если он ещё активен
-            if user_id in active_timers:
-                active_timers[user_id].cancel()
-                del active_timers[user_id]
             if state.get('timeout_processed'):
                 return
             handle_scenario_answer(user_id, payload['choice'])
@@ -1101,5 +1113,5 @@ for event in longpoll.listen():
                     conn.commit()
             handle_user_message(user_id, text, name)
 
-    elif event.type == VkBotEventType.MESSAGE_EVENT:
-        handle_message_event(event)
+elif event.type == VkBotEventType.MESSAGE_EVENT:
+    handle_message_event(event)
