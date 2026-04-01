@@ -155,7 +155,6 @@ def save_state(user_id: int, state: Dict[str, Any]):
     """Сохраняет состояние пользователя в БД (исключая несериализуемые объекты)"""
     # Создаём копию, удаляем timer, если есть
     copy_state = state.copy()
-    copy_state.pop('timer', None)
     with db_lock:
         cursor.execute('''
             INSERT OR REPLACE INTO user_states (user_id, state, updated)
@@ -503,10 +502,12 @@ def skip_emojis_question(user_id: int):
     save_state(user_id, state)
     send_question_emojis(user_id)
 
-# Игра с таймером
 def scenario_timeout(user_id: int):
-    # Таймер сработал
     logger.info(f"Таймер сработал для {user_id}")
+    # Удаляем таймер из словаря (он уже отработал)
+    if user_id in active_timers:
+        del active_timers[user_id]
+
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
@@ -522,9 +523,6 @@ def scenario_timeout(user_id: int):
     send_message(user_id, f"⏰ Время вышло!\nПравильный ответ: {correct_answer}\n\n{explanation}")
     state['current_question'] += 1
     save_state(user_id, state)
-    # Удаляем таймер из активных
-    if user_id in active_timers:
-        del active_timers[user_id]
     if state['current_question'] < state['total']:
         send_scenario_question(user_id)
     else:
@@ -555,31 +553,33 @@ def send_scenario_question(user_id: int):
         return
     q = state['questions'][q_index]
     keyboard = VkKeyboard(one_time=False, inline=True)
-    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button('⚠️ Нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 1})
+    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY, payload={'choice': 0})
     keyboard.add_line()
-    keyboard.add_button('✅ Не нарушение', color=VkKeyboardColor.PRIMARY)
-    keyboard.add_line()
-    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button('🏁 Завершить игру', color=VkKeyboardColor.NEGATIVE, payload={'finish': True})
     msg = f"📖 **Ситуация {q_index+1}/{state['total']}**\n\n{q['situation']}\n\n⏳ У вас есть **10 секунд** на ответ."
     send_message(user_id, msg, keyboard)
     state['timeout_processed'] = False
+    save_state(user_id, state)
+
+    # Создаём таймер и сохраняем в глобальном словаре
     timer = threading.Timer(10.0, scenario_timeout, args=[user_id])
     timer.daemon = True
     timer.start()
-    state['timer'] = timer
-    save_state(user_id, state)
+    active_timers[user_id] = timer
 
 def handle_scenario_answer(user_id: int, choice: int):
     state = get_state(user_id)
     if not state or state.get('scenario') != 'game_scenarios':
         return
     if state.get('timeout_processed'):
-        # Уже таймер сработал, игнорируем
         return
-    # Отменяем таймер
+
+    # Отменяем таймер, если он ещё есть
     if user_id in active_timers:
         active_timers[user_id].cancel()
         del active_timers[user_id]
+
     q_index = state['current_question']
     if q_index >= state['total']:
         finish_game_scenarios(user_id)
@@ -602,6 +602,11 @@ def handle_scenario_answer(user_id: int, choice: int):
         finish_game_scenarios(user_id)
 
 def finish_game_scenarios(user_id: int):
+    # Отменяем таймер, если он ещё активен
+    if user_id in active_timers:
+        active_timers[user_id].cancel()
+        del active_timers[user_id]
+
     state = get_state(user_id)
     if not state:
         return
@@ -619,10 +624,6 @@ def finish_game_scenarios(user_id: int):
     keyboard.add_button('🎮 Игры', color=VkKeyboardColor.PRIMARY)
     keyboard.add_button('🏠 Главное меню', color=VkKeyboardColor.SECONDARY)
     send_message(user_id, msg, keyboard)
-    # Отменяем таймер, если он ещё активен
-    if user_id in active_timers:
-        active_timers[user_id].cancel()
-        del active_timers[user_id]
     clear_state(user_id)
 
 # ==================== ОБРАБОТЧИК СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ ====================
@@ -898,36 +899,43 @@ def handle_user_message(user_id: int, text: str, name: str):
                     if not matched:
                         send_message(user_id, "Используйте кнопки для ответа или введите текст варианта (например, 'Правила дорожного движения').")
         elif state and state.get('scenario') == 'game_scenarios':
-            if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
-                finish_game_scenarios(user_id)
-            else:
-                if state.get('timeout_processed'):
-                    send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
-                    return
-                q_index = state['current_question']
-                if q_index >= state['total']:
-                    finish_game_scenarios(user_id)
-                    return
-                normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
-                choice = None
-                not_offense_phrases = ['не правонарушение', 'не правонаруш', 'не нарушение', 'не наруш', 'законно', 'не является', 'это не правонарушение', 'нет']
-                if normalized in not_offense_phrases:
-                    choice = 0
-                else:
-                    offense_phrases = ['правонарушение', 'правонаруш', 'нарушение', 'наруш', 'преступление', 'да', 'это правонарушение']
-                    if normalized in offense_phrases:
-                        choice = 1
-                    else:
-                        if 'не' in normalized and ('правонаруш' in normalized or 'наруш' in normalized):
-                            choice = 0
-                        elif 'правонаруш' in normalized or 'наруш' in normalized or 'преступл' in normalized:
-                            choice = 1
-                        else:
-                            send_message(user_id, "Введите 'Правонарушение' или 'Не правонарушение'.")
-                            return
-                handle_scenario_answer(user_id, choice)
+    if text_lower in ['завершить игру', 'закончить', '🏁 завершить игру']:
+        finish_game_scenarios(user_id)
+    else:
+        if state.get('timeout_processed'):
+            send_message(user_id, "Время на ответ вышло. Переходим к следующему вопросу.")
+            return
+        q_index = state['current_question']
+        if q_index >= state['total']:
+            finish_game_scenarios(user_id)
+            return
+
+        # Отменяем таймер, если он ещё есть (пользователь ответил текстом)
+        if user_id in active_timers:
+            active_timers[user_id].cancel()
+            del active_timers[user_id]
+
+        normalized = re.sub(r'[^\w\s]', '', text_lower).strip()
+        choice = None
+        not_offense_phrases = ['не нарушение', 'не наруш', 'не правонарушение', 'не правонаруш',
+                               'законно', 'не является', 'это не нарушение', 'нет']
+        if normalized in not_offense_phrases:
+            choice = 0
         else:
-            send_message(user_id, "Я не понял команду. Используй кнопки меню.", get_keyboard('user'))
+            offense_phrases = ['нарушение', 'наруш', 'правонарушение', 'правонаруш',
+                               'преступление', 'да', 'это нарушение']
+            if normalized in offense_phrases:
+                choice = 1
+            else:
+                if 'не' in normalized and ('наруш' in normalized or 'правонаруш' in normalized):
+                    choice = 0
+                elif 'наруш' in normalized or 'правонаруш' in normalized or 'преступл' in normalized:
+                    choice = 1
+                else:
+                    send_message(user_id, "Введите 'Нарушение' или 'Не нарушение'.")
+                    return
+
+        handle_scenario_answer(user_id, choice)
 
 # ==================== ОБРАБОТЧИК ДЛЯ ПСИХОЛОГА ====================
 def handle_psychologist_message(user_id: int, text: str):
